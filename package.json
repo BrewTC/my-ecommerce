@@ -10,10 +10,12 @@
   },
   "dependencies": {
     "ecpay_aio_nodejs": "^1.2.2",
+    "jquery": "^3.7.1",
     "next": "15.1.7",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-owl-carousel": "^2.3.3"
+    "react-slick": "^0.30.3",
+    "slick-carousel": "^1.8.1"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
