@@ -19,3 +19,14 @@ body {
   background: var(--background);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.owl-theme .owl-nav {
+  margin-top: 10px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.owl-theme .owl-dots {
+  margin-top: 10px;
+  text-align: center;
+}
