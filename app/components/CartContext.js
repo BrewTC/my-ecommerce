@@ -22,10 +22,14 @@ export function CartProvider({ children }) {
   };
 
   // 移除購物車商品
-  const removeFromCart = (productId) => {
-    setCart((prevCart) => prevCart.filter((item) => item.id !== productId));
-  };
-
+  function removeFromCart(product) {
+    setCart((currentCart) => {
+      return currentCart.map((item) =>
+        item.id === product.id ? { ...item, quantity: Math.max(item.quantity - 1, 0) } : item
+      ).filter(item => item.quantity > 0); // 移除數量變 0 的商品
+    });
+  }
+  
   return (
     <CartContext.Provider value={{ cart, addToCart, removeFromCart }}>
       {children}

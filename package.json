@@ -8,8 +8,9 @@
     "start": "next start",
     "lint": "next lint"
   },
+  
   "dependencies": {
-    "ecpay_aio_nodejs": "^1.2.2",
+    "ecpay-payment": "^1.1.1",
     "jquery": "^3.7.1",
     "next": "15.1.7",
     "react": "^19.0.0",
@@ -17,6 +18,7 @@
     "react-slick": "^0.30.3",
     "slick-carousel": "^1.8.1"
   },
+
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "eslint": "^9",
