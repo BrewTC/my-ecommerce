@@ -1,48 +1,113 @@
-import { NextResponse } from "next/server";
-import ECPAY from "ecpay-payment";
+import crypto from 'crypto';
+import { NextResponse } from 'next/server';
 
-// app/api/ecpay/route.js
+function calculateCheckMacValue(params) {
+  const { ECPAY_HASH_KEY, ECPAY_HASH_IV } = process.env;
+
+  delete params.CheckMacValue;
+  Object.keys(params).forEach((key) => {
+    if (params[key] === null || params[key] === undefined) params[key] = '';
+  });
+
+  const sortedKeys = Object.keys(params).sort();
+  const rawData = sortedKeys.map((key) => `${key}=${params[key]}`).join('&');
+  const checkValueString = `HashKey=${ECPAY_HASH_KEY}&${rawData}&HashIV=${ECPAY_HASH_IV}`;
+
+  let encodedString = encodeURIComponent(checkValueString)
+    .replace(/%2[dD]/g, '-')
+    .replace(/%5[fF]/g, '_')
+    .replace(/%2[eE]/g, '.')
+    .replace(/%21/g, '!')
+    .replace(/%2[aA]/g, '*')
+    .replace(/%28/g, '(')
+    .replace(/%29/g, ')')
+    .replace(/%20/g, '+')
+    .toLowerCase();
+
+  const checkMacValue = crypto
+    .createHash('sha256')
+    .update(encodedString)
+    .digest('hex')
+    .toUpperCase();
+
+  return checkMacValue;
+}
+
 export async function POST(req) {
   try {
-    // 取得前端傳來的資料
-    const { orderId, amount, itemName } = await req.json();
+    const { amount, itemName } = await req.json();
 
-    // 檢查是否有必要的資料
-    if (!orderId || !amount || !itemName) {
-      return new Response(
-        JSON.stringify({ message: '缺少必要的參數' }),
+    // 記錄傳入參數以便診斷
+    console.log('Received payload:', { amount, itemName });
+
+    // 驗證必要參數
+    if (!amount || amount <= 0) {
+      return NextResponse.json(
+        { success: false, message: '金額無效或缺失' },
+        { status: 400 }
+      );
+    }
+    if (!itemName || itemName.trim() === '') {
+      return NextResponse.json(
+        { success: false, message: '商品名稱無效或缺失' },
         { status: 400 }
       );
     }
 
-    // 用你的 ECPay 商店資訊替換
-    const ecpay = new ECPAY({
-      MerchantID: "3444033", // 測試用商店代號
-      HashKey: "vNaOYHxsJRfDZbaz", // 替換為你的 HashKey
-      HashIV: "Uj7P8Vyoy5paSLgS", // 替換為你的 HashIV
-      isSandbox: true, // 設定為 true 表示測試模式
+    // 生成 MerchantTradeNo
+    const timestamp = Date.now().toString(36);
+    const randomStr = Math.random().toString(36).substr(2, 4);
+    const MerchantTradeNo = `ORD${timestamp}${randomStr}`.slice(0, 20);
+
+    // 交易日期
+    const MerchantTradeDate = new Date()
+      .toISOString()
+      .slice(0, 19)
+      .replace('T', ' ')
+      .replace(/-/g, '/');
+
+    // 綠界支付參數
+    const tradeData = {
+      MerchantID: process.env.ECPAY_MERCHANT_ID,
+      MerchantTradeNo,
+      MerchantTradeDate,
+      PaymentType: 'aio',
+      TotalAmount: Math.round(amount),
+      TradeDesc: '網站訂單',
+      ItemName: itemName.slice(0, 200),
+      ReturnURL: process.env.ECPAY_RETURN_URL,
+      ClientBackURL: process.env.ECPAY_CLIENT_BACK_URL,
+      ChoosePayment: 'ALL',
+      EncryptType: 1,
+    };
+
+    tradeData.CheckMacValue = calculateCheckMacValue({ ...tradeData });
+
+    // 生成表單 HTML
+    const formHtml = `
+      <html>
+      <body onload="document.getElementById('ecpay-form').submit();">
+        <form id="ecpay-form" action="${process.env.ECPAY_PAYMENT_URL}" method="POST">
+          ${Object.keys(tradeData)
+            .map(
+              (key) => `<input type="hidden" name="${key}" value="${tradeData[key]}">`
+            )
+            .join('\n')}
+          <button type="submit">前往綠界付款</button>
+        </form>
+      </body>
+      </html>
+    `;
+
+    return new Response(formHtml, {
+      status: 200,
+      headers: { 'Content-Type': 'text/html' },
     });
-
-    // 設定付款的參數
-    const formData = ecpay.payment_client.aio_check_out_credit_onetime({
-      MerchantTradeNo: orderId,
-      MerchantTradeDate: new Date().toISOString().slice(0, 19).replace("T", " "),
-      TotalAmount: amount,                  // 訂單金額
-      TradeDesc: "測試訂單",                 // 訂單描述
-      ItemName: itemName,                   // 商品名稱
-      ReturnURL: "http://localhost:3000/api/ecpay/notify",  // 付款完成後的回調網址
-      ClientBackURL: "http://localhost:3000/checkout",      // 付款完成後的返回頁面
-    });
-
-    // 檢查 `formData` 並獲取支付 URL
-    console.log('FormData:', formData);  // 這行是為了檢查 formData 中是否有 PaymentURL
-    const paymentUrl = formData.PaymentURL; // 從 formData 提取支付 URL
-
-    // 返回付款 URL 給前端
-    return NextResponse.json({ success: true, paymentUrl: paymentUrl });
-
   } catch (error) {
-    console.error("ECPay API 錯誤：", error);
-    return NextResponse.json({ success: false, message: error.message });
+    console.error('綠界支付 API 錯誤:', error);
+    return NextResponse.json(
+      { success: false, message: '伺服器錯誤，請稍後再試' },
+      { status: 500 }
+    );
   }
 }
